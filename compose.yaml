@@ -1,0 +1,58 @@
+name: smart-inventory
+
+x-worker-env: &worker-env
+  INVENTORY_DB: /data/inventory.sqlite3
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-inventory}:${RABBITMQ_PASSWORD:-local-demo-only}@rabbitmq:5672/%2F
+
+x-app: &app
+  build: .
+  image: smart-inventory:local
+  init: true
+  environment: *worker-env
+  volumes:
+    - inventory_db:/data
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    hostname: inventory-broker
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-inventory}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-demo-only}
+    volumes:
+      - rabbit_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+  api:
+    <<: *app
+    environment:
+      <<: *worker-env
+      INVENTORY_TOKENS_JSON: ${INVENTORY_TOKENS_JSON:-}
+      INVENTORY_SEED_DEMO: ${INVENTORY_SEED_DEMO:-0}
+      INVENTORY_RATE_LIMIT: ${INVENTORY_RATE_LIMIT:-60}
+      INVENTORY_RATE_WINDOW_SECONDS: ${INVENTORY_RATE_WINDOW_SECONDS:-60}
+    ports:
+      - "127.0.0.1:${INVENTORY_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live', timeout=2).close()"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+  worker:
+    <<: *app
+    command: ["python", "-m", "inventory.worker"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; from inventory.worker import broker_health; assert broker_health(os.environ['INVENTORY_DB'])['healthy']"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+volumes:
+  inventory_db:
+  rabbit_data:

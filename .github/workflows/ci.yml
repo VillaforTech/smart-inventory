@@ -1,0 +1,92 @@
+name: Smart Inventory checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit and API contract tests
+        run: |
+          python -m pip install -r requirements.txt
+          python -m unittest discover -s tests -v
+          python -m compileall -q inventory scripts
+          python scripts/export-openapi.py > /tmp/current-openapi.json
+          python - <<'PYCONTRACT'
+          import json
+          from pathlib import Path
+          old=json.loads(Path("docs/openapi.json").read_text())["paths"]
+          new=json.loads(Path("/tmp/current-openapi.json").read_text())["paths"]
+          assert {key:set(value) for key,value in new.items()} == {key:set(value) for key,value in old.items()}
+          PYCONTRACT
+      - name: Static lint of defensive security rules
+        run: |
+          python -m pip install bandit
+          python -m bandit --recursive --severity-level high inventory
+      - name: Dependency advisory audit
+        run: |
+          python -m pip install pip-audit
+          python -m pip_audit --strict -r requirements.txt
+      - name: Validate Compose and start local stack
+        run: |
+          docker compose config --quiet
+          docker compose up --build --wait --wait-timeout 150
+      - name: Verify API and broker topology
+        run: |
+          curl --fail --silent http://127.0.0.1:8000/live
+          docker compose exec -T rabbitmq rabbitmqctl -q list_queues name type durable | tee queues.txt
+          for q in inventory.dashboard inventory.dashboard.dead inventory.dashboard.retry.1 inventory.dashboard.retry.2; do
+            awk -v q="$q" '$1 == q && $2 == "quorum" && $3 == "true" { found = 1 } END { exit !found }' queues.txt
+          done
+      - name: Verify confirm, retry, DLQ and redrive on disposable broker
+        run: |
+          docker compose stop worker
+          docker compose exec -T -e INVENTORY_BROKER_TEST=1 api python - < tests/test_worker.py
+      - name: Version local image
+        run: docker tag smart-inventory:local "smart-inventory:$(cat VERSION)"
+      - name: Scan worktree for secrets
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          exit-code: '1'
+          skip-files: .env
+      - name: Report container SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: smart-inventory:local
+          format: cyclonedx
+          output: inventory-sbom.cdx.json
+      - name: Scan image for high and critical advisories
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: smart-inventory:local
+          scanners: vuln
+          format: table
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+      - name: Save CI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-ci-evidence
+          path: |
+            inventory-sbom.cdx.json
+            queues.txt
+          if-no-files-found: ignore
+      - name: Shutdown local stack
+        if: always()
+        run: docker compose down -v

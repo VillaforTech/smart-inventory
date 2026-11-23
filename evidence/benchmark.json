@@ -1,0 +1,41 @@
+{
+  "mode": "local in-process ASGI, one request at a time; excludes network, real broker and staging",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "machine": "x86_64",
+  "sqlite": "3.53.1",
+  "logical_cpus_visible": 9,
+  "dataset": {
+    "lots": 2400,
+    "distinct_skus": 240,
+    "locations": 1
+  },
+  "authentication": "configured opaque local test token",
+  "statement": "Commands create genuine reservations and outbox rows in a temporary database. RabbitMQ and log shipping are not measured.",
+  "results": {
+    "query": {
+      "requests": 240,
+      "p50_ms": 1.827,
+      "p95_ms": 2.298,
+      "target_p95_ms": 75,
+      "elapsed_s": 0.47,
+      "requests_per_second": 510.68,
+      "unexpected_statuses": 0,
+      "statuses": {
+        "200": 240
+      }
+    },
+    "command": {
+      "requests": 240,
+      "p50_ms": 1.807,
+      "p95_ms": 2.2,
+      "target_p95_ms": 125,
+      "elapsed_s": 0.454,
+      "requests_per_second": 528.71,
+      "unexpected_statuses": 0,
+      "statuses": {
+        "201": 240
+      }
+    }
+  }
+}

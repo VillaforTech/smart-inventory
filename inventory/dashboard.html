@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Inventory | Consola operativa</title>
+<style>
+:root{color-scheme:dark;--bg:#10151c;--panel:#1c2530;--line:#354456;--text:#edf3f8;--mute:#a3b8c9;--green:#77dfb0;--warn:#ffd087}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:auto;padding:clamp(16px,5vw,50px)} header{margin-bottom:25px}
+h1,h2{line-height:1.15;margin:0 0 10px} h1{font-size:clamp(2rem,6vw,3.6rem)} h2{font-size:1.2rem}
+.eyebrow{font-size:.8rem;letter-spacing:.15em;text-transform:uppercase;font-weight:800;color:var(--green)}
+p{margin-top:0;color:var(--mute)} section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:15px}
+form,.pages{display:flex;gap:8px;flex-wrap:wrap;align-items:end} label{display:grid;gap:3px;font-size:.9rem;color:var(--mute)}
+input,button{font:inherit;padding:8px 12px;color:var(--text);border:1px solid #52667a;border-radius:8px;background:#121b25}
+button{font-weight:650;background:var(--green);color:#11251d;cursor:pointer} button:disabled{opacity:.5;cursor:default}
+dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0}
+dt{font-size:.78rem;color:var(--mute)} dd{margin:0;font-weight:650;overflow-wrap:anywhere} .warning{color:var(--warn)}
+.scroll{overflow:auto} table{width:100%;border-collapse:collapse;white-space:nowrap}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)} th{font-size:.8rem;color:var(--mute)}
+code{font-size:.88rem} .pages{margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+<header>
+<p class="eyebrow">Smart Inventory · Operaciones de inventario</p>
+<h1>Smart Inventory</h1>
+<p>Inventario operativo y actividad de reservas recibida por la proyección. Datos sintéticos.</p>
+</header>
+<section aria-label="Acceso a la demo">
+<form id="access">
+<label>Token de demostración<input id="token" type="password" autocomplete="off" required maxlength="512"></label>
+<label>Ubicación (opcional)<input id="location" type="text" placeholder="UIO-01" maxlength="128"></label>
+<button type="submit">Actualizar</button>
+</form>
+<p id="notice" role="status" aria-live="polite">Escribe un token con permiso de panel. No se guarda fuera de esta página.</p>
+</section>
+<section id="pipeline" aria-labelledby="pipeline-title"><h2 id="pipeline-title">Estado de sincronización</h2>
+<dl>
+<div><dt>Trabajador / broker</dt><dd id="worker">Sin consultar</dd></div>
+<div><dt>Última actualización</dt><dd id="last-sync">—</dd></div>
+<div><dt>Atraso (segundos)</dt><dd id="lag">—</dd></div>
+<div><dt>Pendientes en outbox</dt><dd id="pending">—</dd></div>
+<div><dt>Eventos aún no proyectados</dt><dd id="unprojected">—</dd></div>
+<div><dt>Último error registrado</dt><dd id="error">—</dd></div>
+</dl></section>
+<section aria-labelledby="inventory-title"><h2 id="inventory-title">Inventario por lote</h2>
+<p>Fuente: base operativa. Disponible en la tabla = físico − reservado; un lote vencido no es elegible para FEFO.</p>
+<div class="scroll"><table><thead><tr><th>SKU</th><th>Ubicación</th><th>Lote</th><th>Vence (UTC)</th><th>Físico</th><th>Reservado</th><th>Disponible</th></tr></thead>
+<tbody id="inventory"></tbody></table></div>
+<div class="pages"><button type="button" id="prev" disabled>Anterior</button><button type="button" id="next" disabled>Siguiente</button><span id="paging"></span></div></section>
+<section aria-labelledby="activity-title"><h2 id="activity-title">Reservas recientes</h2>
+<p>Fuente: eventos de reserva recibidos por RabbitMQ.</p>
+<div class="scroll"><table><thead><tr><th>Reserva</th><th>SKU</th><th>Ubicación</th><th>Cantidad</th></tr></thead>
+<tbody id="reservations"></tbody></table></div></section>
+<section aria-labelledby="orders-title"><h2 id="orders-title">Pedidos proyectados</h2>
+<p>Fuente: eventos de pedidos de una fuente simulada. No se crean pedidos al reservar inventario.</p>
+<div class="scroll"><table><thead><tr><th>Pedido</th><th>Ubicación</th><th>Estado</th><th>Evento (UTC)</th></tr></thead>
+<tbody id="orders"></tbody></table></div></section>
+</main>
+<script>
+"use strict";
+const get = id => document.getElementById(id);
+let activeToken = "", locationFilter = "", page = 1, generation = 0;
+const size = 20;
+const show = (id, value) => { get(id).textContent = value ?? "—"; };
+function rows(id, values) {
+  const grid = get(id);
+  grid.replaceChildren(...values.map(cells => {
+    const row = document.createElement("tr");
+    cells.forEach(value => {
+      const cell = document.createElement("td");
+      cell.textContent = value ?? "—";
+      row.appendChild(cell);
+    });
+    return row;
+  }));
+}
+function clear() {
+  ["worker", "last-sync", "lag", "pending", "unprojected", "error", "paging"].forEach(id => show(id, "—"));
+  rows("inventory", []);
+  rows("reservations", []);
+  rows("orders", []);
+  get("prev").disabled = get("next").disabled = true;
+}
+async function load() {
+  const serial = ++generation;
+  const q = new URLSearchParams({page: String(page), page_size: String(size)});
+  if (locationFilter) q.set("location", locationFilter);
+  show("notice", "Consultando…");
+  try {
+    const res = await fetch("/api/v1/dashboard?" + q, {
+      headers: {Authorization: "Bearer " + activeToken}, cache: "no-store"
+    });
+    if (!res.ok) throw new Error("Error HTTP " + res.status);
+    const data = await res.json();
+    if (serial !== generation) return;
+    get("worker").classList.toggle("warning", data.stale);
+    show("worker", data.stale ? "Actividad potencialmente atrasada" : "Al día");
+    show("last-sync", data.last_sync || "Aún no ha procesado eventos");
+    const source = data.lag_source === "oldest_unprojected_outbox" ? "sin proyectar más antiguo"
+      : data.lag_source === "oldest_pending_outbox" ? "pendiente más antiguo" : "último recibido";
+    show("lag", data.lag_seconds == null ? null : data.lag_seconds.toFixed(2) + " · " + source);
+    show("pending", data.pending_outbox);
+    show("unprojected", data.unprojected_outbox);
+    show("error", data.last_error ? [data.last_error, data.last_error_at].filter(Boolean).join(" · ") : "Ninguno registrado");
+    rows("inventory", data.inventory.items.map(r => [r.sku,r.location,r.lot,r.expires_on,r.physical,r.reserved,r.available]));
+    rows("reservations", data.reservations.map(r => [r.reservation_id,r.sku,r.location,r.quantity]));
+    rows("orders", data.orders.map(r => [r.order_id,r.location,r.status,r.occurred_at]));
+    show("paging", "Página " + data.inventory.page + " · " + data.inventory.total + " lotes");
+    get("prev").disabled = page === 1;
+    get("next").disabled = page * size >= data.inventory.total;
+    show("notice", "Consulta completada.");
+  } catch (error) {
+    if (serial !== generation) return;
+    clear();
+    show("notice", "No se cargó el panel. " + error.message);
+  }
+}
+get("access").addEventListener("submit", event => {
+  event.preventDefault();
+  activeToken = get("token").value;
+  locationFilter = get("location").value.trim();
+  page = 1;
+  clear();
+  load();
+});
+get("prev").addEventListener("click", () => { if (page > 1) { page--; load(); } });
+get("next").addEventListener("click", () => { page++; load(); });
+</script>
+</body>
+</html>

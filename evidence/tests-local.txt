@@ -1,0 +1,39 @@
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+test_access_log_uses_route_template_and_correlation_not_secret (test_api.ApiTests.test_access_log_uses_route_template_and_correlation_not_secret) ... ok
+test_authentication_scope_and_input_validation (test_api.ApiTests.test_authentication_scope_and_input_validation) ... ok
+test_dashboard_health_and_metrics_show_observed_worker_state (test_api.ApiTests.test_dashboard_health_and_metrics_show_observed_worker_state) ... ok
+test_dashboard_html_is_local_and_token_lives_in_memory (test_api.ApiTests.test_dashboard_html_is_local_and_token_lives_in_memory) ... ok
+test_dashboard_orders_are_location_scoped (test_api.ApiTests.test_dashboard_orders_are_location_scoped) ... ok
+test_list_pagination_filters_and_horizontal_scope (test_api.ApiTests.test_list_pagination_filters_and_horizontal_scope) ... ok
+test_rate_limits_application_and_reset (test_api.ApiTests.test_rate_limits_application_and_reset) ... ok
+test_replenishment_permissions_filters_and_state_transition (test_api.ApiTests.test_replenishment_permissions_filters_and_state_transition) ... ok
+test_reservation_replay_conflict_and_correlation (test_api.ApiTests.test_reservation_replay_conflict_and_correlation) ... ok
+test_concurrent_distinct_keys_cannot_oversell (test_store.StoreTests.test_concurrent_distinct_keys_cannot_oversell) ... ok
+test_concurrent_same_key_allows_only_one_mutation (test_store.StoreTests.test_concurrent_same_key_allows_only_one_mutation) ... ok
+test_fefo_same_expiry_is_deterministic (test_store.StoreTests.test_fefo_same_expiry_is_deterministic) ... ok
+test_fefo_splits_lots_and_excludes_expired (test_store.StoreTests.test_fefo_splits_lots_and_excludes_expired) ... ok
+test_filtered_inventory_order_and_pagination (test_store.StoreTests.test_filtered_inventory_order_and_pagination) ... ok
+test_invalid_inputs (test_store.StoreTests.test_invalid_inputs) ... ok
+test_low_stock_dedup_filters_and_one_way_approval (test_store.StoreTests.test_low_stock_dedup_filters_and_one_way_approval) ... ok
+test_no_stock_never_partially_writes_and_failed_key_can_retry (test_store.StoreTests.test_no_stock_never_partially_writes_and_failed_key_can_retry) ... ok
+test_outbox_commit_envelope_publish_and_pending_status (test_store.StoreTests.test_outbox_commit_envelope_publish_and_pending_status) ... ok
+test_outbox_failure_rolls_back_reservation_and_alert_atomically (test_store.StoreTests.test_outbox_failure_rolls_back_reservation_and_alert_atomically) ... ok
+test_persisted_replay_no_duplicate_outbox_and_key_conflict (test_store.StoreTests.test_persisted_replay_no_duplicate_outbox_and_key_conflict) ... ok
+test_reseed_is_idempotent_and_does_not_restore_reserved_stock (test_store.StoreTests.test_reseed_is_idempotent_and_does_not_restore_reserved_stock) ... ok
+test_confirm_retry_dlx_replay_and_idempotence (test_worker.RealBrokerTests.test_confirm_retry_dlx_replay_and_idempotence) ... skipped 'requires disposable Compose broker'
+test_ack_loss_redelivery_has_one_durable_effect (test_worker.WorkerTests.test_ack_loss_redelivery_has_one_durable_effect) ... ok
+test_bad_envelope_is_terminal (test_worker.WorkerTests.test_bad_envelope_is_terminal) ... ok
+test_broker_readiness_requires_fresh_heartbeat (test_worker.WorkerTests.test_broker_readiness_requires_fresh_heartbeat) ... ok
+test_conflicting_body_same_id_is_not_an_event (test_worker.WorkerTests.test_conflicting_body_same_id_is_not_an_event) ... ok
+test_guarded_redrive_same_id_and_nack_on_mismatch (test_worker.WorkerTests.test_guarded_redrive_same_id_and_nack_on_mismatch) ... ok
+test_order_projection_keeps_latest_instant_and_stable_tie (test_worker.WorkerTests.test_order_projection_keeps_latest_instant_and_stable_tie) ... ok
+test_publish_failure_does_not_mark_outbox (test_worker.WorkerTests.test_publish_failure_does_not_mark_outbox) ... ok
+test_real_store_outbox_drains_into_dashboard_without_double_effect (test_worker.WorkerTests.test_real_store_outbox_drains_into_dashboard_without_double_effect) ... ok
+test_retry_publish_failure_preserves_original (test_worker.WorkerTests.test_retry_publish_failure_preserves_original) ... ok
+test_retry_published_before_ack_and_exhausts_to_dlx (test_worker.WorkerTests.test_retry_published_before_ack_and_exhausts_to_dlx) ... ok
+
+----------------------------------------------------------------------
+Ran 32 tests in 0.268s
+
+OK (skipped=1)
