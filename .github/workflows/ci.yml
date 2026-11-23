@@ -42,7 +42,8 @@ jobs:
       - name: Validate Compose and start local stack
         run: |
           docker compose config --quiet
-          docker compose up --build --wait --wait-timeout 150
+          docker compose build --pull
+          docker compose up --wait --wait-timeout 150
       - name: Verify API and broker topology
         run: |
           curl --fail --silent http://127.0.0.1:8000/live
