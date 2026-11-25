@@ -1,0 +1,1008 @@
+openapi: 3.1.0
+info:
+  title: Smart Inventory
+  description: 'Contrato de cuatro operaciones. Para errores RFC 9457 envía Accept:
+    application/problem+json. Sin opt-in se conserva application/json.'
+  version: 1.1.0
+paths:
+  /api/v1/inventory:
+    get:
+      tags:
+      - inventory
+      summary: List Inventory
+      operationId: list_inventory_api_v1_inventory_get
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: sku
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: Sku
+      - name: location
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: Location
+      - name: lot
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: Lot
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryPage'
+              example:
+                items:
+                - sku: MILK-1L
+                  location: UIO-01
+                  lot: LOT-A
+                  expires_on: '2099-01-02'
+                  physical: 4
+                  reserved: 0
+                  available: 4
+                page: 1
+                page_size: 20
+                total: 1
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+        '403':
+          description: Operation or location not allowed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '429':
+          description: Rate limit exceeded; retry after Retry-After seconds
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+        '422':
+          description: Validation Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+      x-required-scopes:
+      - inventory:read
+      description: 'Permiso requerido: inventory:read. Orden fijo por SKU, ubicación,
+        fecha de vencimiento y lote. No expone existencias de ubicaciones no autorizadas.'
+  /api/v1/reservations:
+    post:
+      tags:
+      - inventory
+      summary: Reserve
+      operationId: reserve_api_v1_reservations_post
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+        example: demo-reservation-01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationBody'
+            example:
+              sku: MILK-1L
+              location: UIO-01
+              quantity: 6
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+              example:
+                reservation_id: 12345678-1234-4234-8234-123456789abc
+                sku: MILK-1L
+                location: UIO-01
+                quantity: 6
+                allocations:
+                - lot: LOT-A
+                  quantity: 4
+                - lot: LOT-B
+                  quantity: 2
+                replayed: false
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+        '403':
+          description: Operation or location not allowed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '429':
+          description: Rate limit exceeded; retry after Retry-After seconds
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+        '409':
+          description: Insufficient stock or idempotency conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '422':
+          description: Validation Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+      x-required-scopes:
+      - inventory:reserve
+      description: 'Permiso requerido: inventory:reserve. Asigna lotes FEFO no vencidos.
+        Idempotency-Key por titular; repetir con cuerpo distinto devuelve 409.'
+  /api/v1/replenishment/suggestions:
+    get:
+      tags:
+      - replenishment
+      summary: Suggestions
+      operationId: suggestions_api_v1_replenishment_suggestions_get
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: State
+      - name: sku
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: Sku
+      - name: supplier
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 128
+          - type: 'null'
+          title: Supplier
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionPage'
+              example:
+                items:
+                - id: 12345678-1234-4234-8234-123456789abc
+                  sku: MILK-1L
+                  location: UIO-01
+                  supplier: DEMO-DAIRY
+                  suggested_quantity: 15
+                  state: PENDING
+                  created_at: '2026-11-25T00:00:00Z'
+                  approved_at: null
+                page: 1
+                page_size: 20
+                total: 1
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+        '403':
+          description: Operation or location not allowed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '429':
+          description: Rate limit exceeded; retry after Retry-After seconds
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+        '422':
+          description: Validation Error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+      x-required-scopes:
+      - replenishment:read
+      description: 'Permiso requerido: replenishment:read. No cambia stock. PENDING
+        es el estado OPEN de negocio, conservado por compatibilidad.'
+  /api/v1/replenishment/suggestions/{suggestion_id}/approve:
+    post:
+      tags:
+      - replenishment
+      summary: Approve
+      operationId: approve_api_v1_replenishment_suggestions__suggestion_id__approve_post
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: suggestion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Suggestion Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResponse'
+              example:
+                id: 12345678-1234-4234-8234-123456789abc
+                state: APPROVED
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+        '403':
+          description: Operation or location not allowed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '429':
+          description: Rate limit exceeded; retry after Retry-After seconds
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+        '404':
+          description: Suggestion not found in allowed locations
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '409':
+          description: Suggestion is not in pending state
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '503':
+          description: Service Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyError'
+      x-required-scopes:
+      - replenishment:approve
+      description: 'Permiso requerido: replenishment:approve. Compras: estado pendiente
+        (PENDING, equivalente a OPEN) a APPROVED; no crea una compra automáticamente.'
+components:
+  schemas:
+    Allocation:
+      properties:
+        lot:
+          type: string
+          title: Lot
+        quantity:
+          type: integer
+          title: Quantity
+      type: object
+      required:
+      - lot
+      - quantity
+      title: Allocation
+    ApprovalResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        state:
+          type: string
+          const: APPROVED
+          title: State
+      type: object
+      required:
+      - id
+      - state
+      title: ApprovalResponse
+    DashboardResponse:
+      properties:
+        inventory:
+          $ref: '#/components/schemas/InventoryPage'
+        inventory_source:
+          type: string
+          const: sqlite_operation
+          title: Inventory Source
+        activity_source:
+          type: string
+          const: rabbitmq_projection
+          title: Activity Source
+        broker_healthy:
+          type: boolean
+          title: Broker Healthy
+        worker_last_seen:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Worker Last Seen
+        last_sync:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Sync
+        last_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error
+        last_error_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Error At
+        lag_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Lag Seconds
+        lag_source:
+          anyOf:
+          - type: string
+            enum:
+            - oldest_unprojected_outbox
+            - oldest_pending_outbox
+            - last_processed_event
+          - type: 'null'
+          title: Lag Source
+        pending_outbox:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pending Outbox
+        unprojected_outbox:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Unprojected Outbox
+        stale:
+          type: boolean
+          title: Stale
+        recent_events:
+          items:
+            $ref: '#/components/schemas/EventEnvelope'
+          type: array
+          title: Recent Events
+        reservations:
+          items:
+            $ref: '#/components/schemas/ProjectedReservation'
+          type: array
+          title: Reservations
+        orders:
+          items:
+            $ref: '#/components/schemas/ProjectedOrder'
+          type: array
+          title: Orders
+        events_processed:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Events Processed
+        events_by_type:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Events By Type
+      type: object
+      required:
+      - inventory
+      - inventory_source
+      - activity_source
+      - broker_healthy
+      - worker_last_seen
+      - last_sync
+      - last_error
+      - last_error_at
+      - lag_seconds
+      - lag_source
+      - pending_outbox
+      - unprojected_outbox
+      - stale
+      - recent_events
+      - reservations
+      - orders
+      - events_processed
+      - events_by_type
+      title: DashboardResponse
+    EventEnvelope:
+      properties:
+        eventId:
+          type: string
+          title: Eventid
+        eventType:
+          type: string
+          title: Eventtype
+        schemaVersion:
+          type: integer
+          title: Schemaversion
+        occurredAt:
+          type: string
+          title: Occurredat
+        correlationId:
+          type: string
+          title: Correlationid
+        producer:
+          type: string
+          title: Producer
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - eventId
+      - eventType
+      - schemaVersion
+      - occurredAt
+      - correlationId
+      - producer
+      - payload
+      title: EventEnvelope
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InventoryLot:
+      properties:
+        sku:
+          type: string
+          title: Sku
+        location:
+          type: string
+          title: Location
+        lot:
+          type: string
+          title: Lot
+        expires_on:
+          type: string
+          title: Expires On
+        physical:
+          type: integer
+          title: Physical
+        reserved:
+          type: integer
+          title: Reserved
+        available:
+          type: integer
+          title: Available
+      type: object
+      required:
+      - sku
+      - location
+      - lot
+      - expires_on
+      - physical
+      - reserved
+      - available
+      title: InventoryLot
+    InventoryPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/InventoryLot'
+          type: array
+          title: Items
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - page
+      - page_size
+      - total
+      title: InventoryPage
+    ProjectedOrder:
+      properties:
+        order_id:
+          type: string
+          title: Order Id
+        location:
+          type: string
+          title: Location
+        status:
+          type: string
+          title: Status
+        occurred_at:
+          type: string
+          title: Occurred At
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Id
+      type: object
+      required:
+      - order_id
+      - location
+      - status
+      - occurred_at
+      title: ProjectedOrder
+    ProjectedReservation:
+      properties:
+        reservation_id:
+          type: string
+          title: Reservation Id
+        sku:
+          type: string
+          title: Sku
+        location:
+          type: string
+          title: Location
+        quantity:
+          type: integer
+          title: Quantity
+        allocations:
+          items:
+            $ref: '#/components/schemas/Allocation'
+          type: array
+          title: Allocations
+      type: object
+      required:
+      - reservation_id
+      - sku
+      - location
+      - quantity
+      - allocations
+      title: ProjectedReservation
+    ReservationBody:
+      properties:
+        sku:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Sku
+        location:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Location
+        quantity:
+          type: integer
+          maximum: 9.223372036854776e+18
+          exclusiveMinimum: 0.0
+          title: Quantity
+      additionalProperties: false
+      type: object
+      required:
+      - sku
+      - location
+      - quantity
+      title: ReservationBody
+    ReservationResponse:
+      properties:
+        reservation_id:
+          type: string
+          title: Reservation Id
+        sku:
+          type: string
+          title: Sku
+        location:
+          type: string
+          title: Location
+        quantity:
+          type: integer
+          title: Quantity
+        allocations:
+          items:
+            $ref: '#/components/schemas/Allocation'
+          type: array
+          title: Allocations
+        replayed:
+          type: boolean
+          title: Replayed
+      type: object
+      required:
+      - reservation_id
+      - sku
+      - location
+      - quantity
+      - allocations
+      - replayed
+      title: ReservationResponse
+    Suggestion:
+      properties:
+        id:
+          type: string
+          title: Id
+        sku:
+          type: string
+          title: Sku
+        location:
+          type: string
+          title: Location
+        supplier:
+          type: string
+          title: Supplier
+        suggested_quantity:
+          type: integer
+          title: Suggested Quantity
+        state:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          title: State
+        created_at:
+          type: string
+          title: Created At
+        approved_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved At
+      type: object
+      required:
+      - id
+      - sku
+      - location
+      - supplier
+      - suggested_quantity
+      - state
+      - created_at
+      - approved_at
+      title: Suggestion
+    SuggestionPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Suggestion'
+          type: array
+          title: Items
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - items
+      - page
+      - page_size
+      - total
+      title: SuggestionPage
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+          minLength: 1
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          minLength: 1
+        code:
+          type: string
+          minLength: 1
+        correlationId:
+          type: string
+          minLength: 1
+        fields:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - type
+      - title
+      - status
+      - detail
+      - code
+      - correlationId
+    LegacyError:
+      type: object
+      properties:
+        detail:
+          type: object
+          properties:
+            code:
+              type: string
+              minLength: 1
+            message:
+              type: string
+              minLength: 1
+            fields:
+              type: array
+              items:
+                type: string
+                minLength: 1
+          required:
+          - code
+          - message
+      required:
+      - detail
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+servers:
+- url: http://127.0.0.1:8000
+  description: Demo local con datos sintéticos

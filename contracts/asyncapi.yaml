@@ -1,0 +1,112 @@
+asyncapi: 3.0.0
+info:
+  title: Smart Inventory versioned events
+  version: 1.0.0
+  description: Proyecciones adicionales con los mismos identificadores de evento.
+    La cola dashboard conserva el formato anterior.
+servers:
+  local:
+    host: 127.0.0.1:5672
+    protocol: amqp
+    description: Broker local; usa el perfil RabbitMQ del proyecto
+defaultContentType: application/json
+channels:
+  stockReserved:
+    address: inventory.stock-reserved.v1
+    description: Una reserva FEFO se confirma, no se emite al repetir la misma clave.
+    servers:
+    - $ref: '#/servers/local'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: inventory.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      stockReserved:
+        $ref: '#/components/messages/stockReserved'
+  riskDetected:
+    address: replenishment.risk-detected.v1
+    description: Stock elegible cae al umbral o menos y se crea una nueva sugerencia;
+      no predice riesgo futuro.
+    servers:
+    - $ref: '#/servers/local'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: inventory.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
+    messages:
+      riskDetected:
+        $ref: '#/components/messages/riskDetected'
+operations:
+  sendStockReserved:
+    action: send
+    channel:
+      $ref: '#/channels/stockReserved'
+    messages:
+    - $ref: '#/channels/stockReserved/messages/stockReserved'
+    bindings:
+      amqp:
+        deliveryMode: 2
+        mandatory: false
+        bindingVersion: 0.3.0
+  sendRiskDetected:
+    action: send
+    channel:
+      $ref: '#/channels/riskDetected'
+    messages:
+    - $ref: '#/channels/riskDetected/messages/riskDetected'
+    bindings:
+      amqp:
+        deliveryMode: 2
+        mandatory: false
+        bindingVersion: 0.3.0
+components:
+  messages:
+    stockReserved:
+      name: stockReserved
+      title: inventory.stock-reserved.v1
+      description: Una reserva FEFO se confirma, no se emite al repetir la misma clave.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlationId
+      payload:
+        schemaFormat: application/schema+json;version=draft-07
+        schema:
+          $ref: ./schemas/reservation-created.v1.schema.json
+    riskDetected:
+      name: riskDetected
+      title: replenishment.risk-detected.v1
+      description: Stock elegible cae al umbral o menos y se crea una nueva sugerencia;
+        no predice riesgo futuro.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlationId
+      payload:
+        schemaFormat: application/schema+json;version=draft-07
+        schema:
+          $ref: ./schemas/replenishment-risk-detected.v1.schema.json
+x-consumer-policy:
+  publisher: smart-inventory worker, outbox transaccional y publisher confirms
+  versionedSubscribers: Cada consumidor declara su cola y liga una routing key .v1.
+    El productor confirma aceptación del broker; sin binding no hay entrega. No se
+    autoaprovisionan colas de terceros.
+  legacyDashboard:
+    queue: inventory.dashboard
+    bindings:
+    - inventory.reserved
+    - inventory.low-stock
+    ack: ACK tras persistencia idempotente; duplicados por eventId no reaplican efectos.
+    retry: Dos colas de reintento con 1 y 5 segundos. NACK sin requeue en errores
+      terminales.
+    deadLetterQueue: inventory.dashboard.dead
+  versionedSubscriberRecommendation: ACK después de persistir; deduplicar por eventId;
+    retry/DLQ es responsabilidad del consumidor.
