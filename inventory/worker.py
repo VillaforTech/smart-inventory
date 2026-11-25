@@ -8,6 +8,8 @@ import time
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 
+from .contract_events import versioned_event
+
 EXCHANGE = "inventory.events"
 RETRY_EXCHANGE = "inventory.retry"
 DEAD_EXCHANGE = "inventory.dead"
@@ -253,10 +255,10 @@ def declare(channel):
     channel.confirm_delivery()
 
 
-def confirmed(channel, exchange, routing_key, body, properties):
+def confirmed(channel, exchange, routing_key, body, properties, *, mandatory=True):
     # BlockingChannel raises on nack/unroutable, older API variants may return False.
     result = channel.basic_publish(
-        exchange=exchange, routing_key=routing_key, body=body, properties=properties, mandatory=True
+        exchange=exchange, routing_key=routing_key, body=body, properties=properties, mandatory=mandatory
     )
     if result is False:
         raise RuntimeError("publish not confirmed")
@@ -270,10 +272,17 @@ def properties_for(envelope, properties_factory, attempt=0):
     )
 
 
-def publish_pending(channel, store, path, properties_factory, limit=16):
+def publish_pending(channel, store, path, properties_factory, limit=16, *, include_versioned=False):
     for event in store.pending_events(limit=limit):
         body = encode(event)
         confirmed(channel, EXCHANGE, ROUTES[event["eventType"]], body, properties_for(event, properties_factory))
+        if include_versioned:
+            projection = versioned_event(event)
+            if projection is not None:
+                route, envelope = projection
+                # The legacy dashboard remains mandatory; versioned subscribers bind independently.
+                confirmed(channel, EXCHANGE, route, json.dumps(envelope).encode("utf-8"),
+                          properties_for(envelope, properties_factory), mandatory=False)
         if store.mark_event_published(event["eventId"]):
             with database(path) as db:
                 inc(db, "published")
@@ -377,7 +386,7 @@ def run(path, url, recovery=None):
                 heartbeat(path)
                 last_heartbeat = time.monotonic()
                 while True:
-                    publish_pending(channel, store, path, pika.BasicProperties)
+                    publish_pending(channel, store, path, pika.BasicProperties, include_versioned=True)
                     for _ in range(32):
                         method, props, body = channel.basic_get(queue=QUEUE, auto_ack=False)
                         if method is None:

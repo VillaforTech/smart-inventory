@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "replenishment.risk-detected.v1",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "const": "replenishment.risk-detected"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(?:Z|\\+00:00)$"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "producer": {
+      "const": "smart-inventory"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "suggestionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sku": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reorderPoint": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supplier": {
+          "type": "string",
+          "minLength": 1
+        },
+        "suggestedQty": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "suggestionId",
+        "sku",
+        "location",
+        "available",
+        "reorderPoint",
+        "supplier",
+        "suggestedQty"
+      ]
+    }
+  },
+  "required": [
+    "eventId",
+    "eventType",
+    "schemaVersion",
+    "occurredAt",
+    "correlationId",
+    "producer",
+    "payload"
+  ]
+}

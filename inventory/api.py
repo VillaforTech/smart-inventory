@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from http import HTTPStatus
 import logging
 import os
 import re
@@ -19,6 +20,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -245,23 +247,57 @@ def create_app(db_path=None, *, tokens_json=None, seed_demo=None, rate_limit=Non
                              "correlationId": request.state.correlation_id}, separators=(",", ":")))
         return response
 
+    def error_response(request, status, info, headers=None):
+        accept = request.headers.get("accept", "")
+        negotiated = False
+        for part in accept.split(","):
+            media, *parameters = part.strip().lower().split(";")
+            if media.strip() != "application/problem+json":
+                continue
+            try:
+                quality = next((float(value[2:]) for item in parameters
+                                if (value := item.strip()).startswith("q=")), 1.0)
+            except ValueError:
+                continue
+            if 0 < quality <= 1:
+                negotiated = True
+                break
+        if not request.url.path.startswith("/api/v1/"):
+            return JSONResponse({"detail": info}, status_code=status, headers=headers)
+        hdr = {**(headers or {}), "Vary": "Accept"}
+        if not negotiated:
+            return JSONResponse({"detail": info}, status_code=status, headers=hdr)
+        if not isinstance(info, dict):
+            info = {"code": "http_error", "message": str(info)}
+        code, message = info["code"], info["message"]
+        problem = {"type": "about:blank", "title": HTTPStatus(status).phrase,
+                   "status": status, "detail": message, "code": code,
+                   "correlationId": request.state.correlation_id}
+        if "fields" in info:
+            problem["fields"] = info["fields"]
+        return JSONResponse(problem, status_code=status, headers=hdr,
+                            media_type="application/problem+json")
+
+    @api.exception_handler(StarletteHTTPException)
+    async def http_error(request, exc):
+        return error_response(request, exc.status_code, exc.detail, exc.headers)
+
     @api.exception_handler(StoreError)
     async def store_error(request, exc):
-        return JSONResponse({"detail": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
+        return error_response(request, exc.status, {"code": exc.code, "message": exc.message})
 
     @api.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
         # Do not reflect raw request input (e.g. credentials accidentally supplied in JSON).
         fields = [".".join(str(piece) for piece in error["loc"]) for error in exc.errors()]
-        return JSONResponse({"detail": {"code": "validation_error", "message": "Invalid request fields",
-                                        "fields": fields}}, status_code=422)
+        return error_response(request, 422, {"code": "validation_error", "message": "Invalid request fields",
+                                             "fields": fields})
 
     @api.exception_handler(sqlite3.Error)
     async def sqlite_failure(request, exc):
         LOG.warning(json.dumps({"event": "sqlite_unavailable", "correlationId": request.state.correlation_id,
                                 "error_type": type(exc).__name__}))
-        return JSONResponse({"detail": {"code": "storage_unavailable", "message": "Inventory storage unavailable"}},
-                            status_code=503)
+        return error_response(request, 503, {"code": "storage_unavailable", "message": "Inventory storage unavailable"})
 
     def authorize(scope, operation=None):
         def check(request: Request, credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(AUTH)]):

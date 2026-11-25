@@ -1,0 +1,40 @@
+name: API contracts
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Lint OpenAPI and validate HTTP and event fixtures
+        run: |
+          pip install -r requirements.txt -r requirements-contracts.txt
+          python -m openapi_spec_validator contracts/openapi.yaml
+          python -m unittest discover -s tests -v
+          PYTHONPATH=tests:. python -m unittest discover -s contract-tests -v
+          python scripts/build-contracts.py
+          git diff --exit-code -- contracts/
+      - name: Validate AsyncAPI and external schemas
+        run: npx --yes --package=@asyncapi/cli asyncapi validate contracts/asyncapi.yaml
+      - name: Render contract HTML
+        run: python scripts/render-contract-docs.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-inventory-contract-evidence
+          path: |
+            contracts/
+            contract-docs.html
