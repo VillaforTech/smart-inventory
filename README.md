@@ -17,6 +17,8 @@ Smart Inventory allocates the earliest-expiring eligible lots (FEFO), prevents d
 
 This component builds on the inventory domain explored in [LogistPulse](https://github.com/VillaforTech/logistpulse). The prior LogistPulse team is [@VillaforTech](https://github.com/VillaforTech), [@nikotov](https://github.com/nikotov), [@DanielSalazar0710](https://github.com/DanielSalazar0710), [@Dmt-155lbs](https://github.com/Dmt-155lbs), and [@oandretty010](https://github.com/oandretty010). This credit does not attribute individual changes or suggest approval of this release.
 
+[@Ryan2040](https://github.com/Ryan2040) is also listed as a team member for the API catalog and contracts. This credit does not attribute code changes.
+
 ## Quick start
 
 Requirements: Python 3.12 and Docker Compose v2.
